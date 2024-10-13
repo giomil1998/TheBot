@@ -82,19 +82,6 @@ crsp = pd.read_csv('data/crsp_data.csv')
 print("Calculated Piotroski Scores Head:")
 print(funda[['cusip', 'fyear', 'Score', 'tic']].head())
 
-# unique_dates = funda.groupby("fyear")["datadate"].unique()
-# unique_dates.to_csv("dates_so_far.csv", sep='\t')
-# unique_dates = pd.read_csv("dates_so_far.csv", sep='\t')
-# dates_so_far = pd.read_csv('dates_so_far.csv')
-# flat_list = [date for sublist in unique_dates['datadate'] for date in sublist.split(" ")]
-# # Then, convert it into a set to get unique values
-# unique_dates = set(flat_list)
-# # If you want to sort the unique dates
-# unique_dates = sorted(unique_dates)
-# # Convert it back to a list if you need a list format
-# unique_dates_list = list(unique_dates)
-# print(unique_dates_list)
-
 unique_dates = funda["datadate"].unique()
 unique_dates = sorted(unique_dates)
 print(len(unique_dates))
