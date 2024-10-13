@@ -5,8 +5,17 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 import yfinance as yf
 import csv
+from dotenv import load_dotenv
+import os
 
-# Connect to WRDS (You need to replace 'your_username' and 'your_password' with your actual WRDS credentials)
+
+# Load environment variables from the .env file
+load_dotenv()
+wrds_username = os.getenv('WRDS_USERNAME')
+wrds_password = os.getenv('WRDS_PASSWORD')
+
+# db = wrds.Connection(wrds_username=wrds_username, wrds_password=wrds_password)
+
 # Define the time period
 start_date = '2013-01-01'
 end_date = '2024-07-20'
@@ -33,7 +42,7 @@ end_date = '2024-07-20'
 # """
 # funda = db.raw_sql(funda_query)
 #
-# Stock Prices (CRSP Data)
+# # Stock Prices (CRSP Data)
 # crsp_query = f"""
 #     SELECT permno, date, ret, prc, shrout, cusip
 #     FROM crsp.dsf
