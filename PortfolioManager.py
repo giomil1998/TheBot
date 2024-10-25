@@ -1,43 +1,73 @@
 import pandas as pd
 
 class PortfolioManager:
-    def __init__(self, funda, crsp):
-        self.funda = funda
-        self.crsp = crsp
+    def __init__(self, inactivity_threshold, portfolio_size):
+        self.inactivity_threshold = inactivity_threshold
+        self.portfolio_size = portfolio_size
+        self.long_portfolio = {}   # {cusip: {'score': Score, 'entry_date': date, 'last_traded_date': date}}
+        self.short_portfolio = {}
+        self.company_scores = pd.DataFrame(columns=['cusip', 'score', 'datadate'])
+        self.company_scores.set_index('cusip', inplace=True)
 
-    def portfolio_nsort(self, dates_so_far, n=15, max_size=20):
-        quantile_companies = {}
+    def remove_inactive_holdings(self, portfolio, current_date):
+        to_remove = []
+        for cusip, info in portfolio.items():
+            days_inactive = (current_date - info['last_traded_date']).days
+            if days_inactive > self.inactivity_threshold:
+                to_remove.append(cusip)
+        for cusip in to_remove:
+            del portfolio[cusip]
 
-        for date in dates_so_far:
-            funda_date = self.funda.loc[self.funda['datadate'] == date]
-            quantile_companies[date] = {'short': [], 'long': []}
+    def update_company_scores(self, new_reports):
+        for idx, row in new_reports.iterrows():
+            cusip = row['cusip']
+            score = row['Score']
+            datadate = row['datadate']
+            self.company_scores.loc[cusip] = {'score': score, 'datadate': datadate}
 
-            # Get the 15 companies with the smallest scores (short) and largest scores (long)
-            short_companies = funda_date.nsmallest(n, 'Score')['cusip'].tolist()
-            long_companies = funda_date.nlargest(n, 'Score')['cusip'].tolist()
+    def build_portfolios(self, current_date):
+        if not self.company_scores.empty:
+            # Get the top and bottom companies by score
+            sorted_scores = self.company_scores.sort_values(by=['score', 'datadate'], ascending=[False, True])
+            top_companies = sorted_scores.head(self.portfolio_size)
+            bottom_companies = sorted_scores.tail(self.portfolio_size)
 
-            quantile_companies[date]['short'].extend(short_companies)
-            quantile_companies[date]['long'].extend(long_companies)
+            # Update or add companies to long portfolio
+            self._update_portfolio(self.long_portfolio, top_companies, current_date)
 
-            quantile_companies[date]['short'] = list(set(quantile_companies[date]['short']))[:max_size]
-            quantile_companies[date]['long'] = list(set(quantile_companies[date]['long']))[:max_size]
+            # Update or add companies to short portfolio
+            self._update_portfolio(self.short_portfolio, bottom_companies, current_date)
+        else:
+            self.long_portfolio = {}
+            self.short_portfolio = {}
 
-        return quantile_companies
+    def _update_portfolio(self, portfolio, companies, current_date):
+        for cusip in companies.index:
+            score = companies.loc[cusip, 'score']
+            datadate = companies.loc[cusip, 'datadate']
+            if cusip not in portfolio:
+                portfolio[cusip] = {
+                    'score': score,
+                    'entry_date': current_date,
+                    'last_traded_date': current_date  # Initialize with current date
+                }
+            else:
+                portfolio[cusip]['score'] = score  # Update score if it has changed
 
-    def calculate_strategy_returns(self, quantile_companies):
-        strategy_returns = {'long': [], 'short': [], 'long_short': [], 'date': []}
-        for date, companies in quantile_companies.items():
-            crsp_date = self.crsp.loc[self.crsp['date'] == date]
-            long_crsp = crsp_date.loc[crsp_date['cusip'].isin(companies['long'])]
-            short_crsp = crsp_date.loc[crsp_date['cusip'].isin(companies['short'])]
+    def remove_inactive_holdings_from_portfolios(self, current_date):
+        self.remove_inactive_holdings(self.long_portfolio, current_date)
+        self.remove_inactive_holdings(self.short_portfolio, current_date)
 
-            long_return = long_crsp['ret'].mean() if not long_crsp.empty else 0
-            short_return = short_crsp['ret'].mean() if not short_crsp.empty else 0
+    def update_last_traded_date(self, traded_cusips, current_date):
+        for cusip in self.long_portfolio.keys():
+            if cusip in traded_cusips:
+                self.long_portfolio[cusip]['last_traded_date'] = current_date
 
-            long_short_return = long_return - short_return
-            strategy_returns['date'].append(date)
-            strategy_returns['long'].append(long_return)
-            strategy_returns['short'].append(short_return)
-            strategy_returns['long_short'].append(long_short_return)
+        for cusip in self.short_portfolio.keys():
+            if cusip in traded_cusips:
+                self.short_portfolio[cusip]['last_traded_date'] = current_date
 
-        return pd.DataFrame(strategy_returns)
+    def get_current_portfolios(self):
+        long_cusips = list(self.long_portfolio.keys())
+        short_cusips = list(self.short_portfolio.keys())
+        return long_cusips, short_cusips

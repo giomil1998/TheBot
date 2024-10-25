@@ -6,14 +6,17 @@ from WRDSConnection import WRDSConnection
 class DataHandler:
     @staticmethod
     def fetch_and_save_new_data(start_date, end_date):
+        print("Downloading Data")
         wrds_credentials = EnvironmentLoader.load_wrds_credentials()
         wrds_connection = WRDSConnection(wrds_credentials['wrds_username'], wrds_credentials['wrds_password'])
         funda = wrds_connection.fetch_fundamental_data(start_date, end_date)
         crsp = wrds_connection.fetch_crsp_data(start_date, end_date)
         wrds_connection.close()
 
+        print("Calculating Piotroski Scores")
         DataHandler.add_piotroski_column_to_funda(funda)
 
+        print("Saving data")
         funda.to_csv("data/funda.csv")
         crsp.to_csv("data/crsp.csv")
         return funda, crsp
@@ -50,6 +53,7 @@ class DataHandler:
     @staticmethod
     def read_data(funda_file_path, crsp_file_path):
         """Read the fundamental and CRSP data from CSV files."""
+        print("Loading data")
         funda = pd.read_csv(funda_file_path)
         crsp = pd.read_csv(crsp_file_path)
         return funda, crsp
@@ -57,6 +61,7 @@ class DataHandler:
     @staticmethod
     def clean_funda(funda):
         """Clean the funda DataFrame by removing duplicates, filtering missing years, and cleaning CUSIP."""
+        print("Cleaning funda dataframe")
         funda = DataHandler.filter_duplicates(funda)
         funda = DataHandler.filter_missing_years(funda)
         funda = DataHandler.standardize_cusips(funda, 'cusip')
@@ -67,6 +72,7 @@ class DataHandler:
     @staticmethod
     def clean_crsp(crsp):
         """Clean the crsp DataFrame by ensuring CUSIPs are 8 characters long and strings."""
+        print("Cleaning crsp dataframe")
         crsp = DataHandler.standardize_cusips(crsp, 'cusip')
         crsp = DataHandler.standardize_date(crsp, 'date')
         return crsp
