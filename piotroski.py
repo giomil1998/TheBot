@@ -1,282 +1,154 @@
 import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-from pandas.core.interchange.dataframe_protocol import DataFrame
 from tqdm import tqdm
-import yfinance as yf
-import csv
 
-from DataProcessor import DataProcessor
-from EnvironmentLoader import EnvironmentLoader
+from DataHandler import DataHandler
 from Plotter import Plotter
-from PortfolioManager import PortfolioManager
-from WRDSConnection import WRDSConnection
 
 
-
-START_DATE = '2013-01-01'
-END_DATE = '2024-07-20'
-GET_NEW_DATA = False
 
 if __name__ == "__main__":
-    wrds_credentials = EnvironmentLoader.load_wrds_credentials()
+    START_DATE = '2013-01-01'
+    END_DATE = '2023-12-29'
+    PORTFOLIO_SIZE = 30  # Maximum number of positions in each portfolio
+    INACTIVITY_THRESHOLD = 30  # Number of consecutive days without trading
+    GET_NEW_DATA = False
+
 
     if GET_NEW_DATA:
-        # Initialize WRDS connection and fetch data
-        wrds_connection = WRDSConnection(wrds_credentials['wrds_username'], wrds_credentials['wrds_password'])
-        funda = wrds_connection.fetch_fundamental_data(START_DATE, END_DATE)
-        crsp = wrds_connection.fetch_crsp_data(START_DATE, END_DATE)
-        wrds_connection.close()
-
-        DataProcessor.add_piotroski_column_to_funda(funda)
-
-        funda.to_csv("data/funda.csv")
-        crsp.to_csv("data/crsp.csv")
+        funda, crsp = DataHandler.fetch_and_save_new_data(START_DATE, END_DATE)
     else:
-        #Read from saved csv file
-        funda = pd.read_csv('data/funda.csv')
-        crsp = pd.read_csv('data/crsp.csv')
+        funda, crsp = DataHandler.read_data('data/funda.csv', 'data/crsp.csv')
 
-    # Debug: Check Piotroski scores calculation
-    print("Calculated Piotroski Scores Head:")
-    print(funda[['cusip', 'fyear', 'Score', 'tic']].head())
-
-    unique_dates = funda["datadate"].unique()
-    unique_dates = sorted(unique_dates)
-    print(len(unique_dates))
-    # Write to CSV
-    with open("data/dates_so_far.csv", "w", newline="") as file:
-        writer = csv.writer(file)
-        writer.writerow(unique_dates)
-
-    # Read from CSV
-    with open('data/dates_so_far.csv', 'r') as file:
-        reader = csv.reader(file)
-        dates_so_far = next(reader)
-
-    print(dates_so_far)
-
-
-    # Create portfolio manager
-    portfolio_manager = PortfolioManager(funda, crsp)
-
-    # Portfolio sorting and calculation
-    quantile_companies = portfolio_manager.portfolio_nsort(unique_dates)  # Replace with actual dates
-    strategy_returns_df = portfolio_manager.calculate_strategy_returns(quantile_companies)
-
-    # Plot results
-    Plotter.plot_strategy_returns(strategy_returns_df)
+    funda = DataHandler.clean_funda(funda)
+    crsp = DataHandler.clean_crsp(crsp)
 
 
 
-
-def portfolio_nsort(funda, dates_so_far, n=15, max_size=20):
-    quantile_companies = {}
-
-    for date in dates_so_far:
-        # Select companies that published data on that date
-        funda_date = funda.loc[funda['datadate'] == date]
-
-        # Initialize short and long lists for this date
-        quantile_companies[date] = {'short': [], 'long': []}
-
-        # Get the 15 companies with the smallest scores (short) and largest scores (long)
-        short_companies = funda_date.nsmallest(n, 'Score')['cusip'].tolist()
-        long_companies = funda_date.nlargest(n, 'Score')['cusip'].tolist()
-
-        # Add only unique cusips to the 'short' group
-        for cusip in short_companies:
-            if cusip not in quantile_companies[date]['short']:
-                quantile_companies[date]['short'].append(cusip)
-
-        # Add only unique cusips to the 'long' group
-        for cusip in long_companies:
-            if cusip not in quantile_companies[date]['long']:
-                quantile_companies[date]['long'].append(cusip)
-
-        # Limit the number of companies in the short list to max_size (e.g., 20)
-        if len(quantile_companies[date]['short']) > max_size:
-            # Get the lowest scores again to keep only the best-performing companies
-            short_cusips = funda.loc[funda['cusip'].isin(quantile_companies[date]['short'])].nsmallest(max_size, 'Score')['cusip'].tolist()
-            quantile_companies[date]['short'] = short_cusips
-
-        # Limit the number of companies in the long list to max_size (e.g., 20)
-        if len(quantile_companies[date]['long']) > max_size:
-            # Get the highest scores again to keep only the worst-performing companies
-            long_cusips = funda.loc[funda['cusip'].isin(quantile_companies[date]['long'])].nlargest(max_size, 'Score')['cusip'].tolist()
-            quantile_companies[date]['long'] = long_cusips
-
-    return quantile_companies
-
-quantile_companies = portfolio_nsort(funda, dates_so_far)
-def calculate_strategy_returns(crsp, quantile_companies):
-    # Initialize empty DataFrames to store cumulative returns
-    strategy_returns = {'long': [], 'short': [], 'long_short': [], 'date': []}
-
-    for date, companies in quantile_companies.items():
-        print(date)
-        print(companies)
-        # Filter CRSP data for the current date and cusips in 'long' and 'short' lists
-        crsp_date = crsp.loc[crsp['date'] == date]
-        long_crsp = crsp_date.loc[crsp_date['cusip'].isin(companies['long'])]
-        short_crsp = crsp_date.loc[crsp_date['cusip'].isin(companies['short'])]
-
-        # Calculate the average return for long and short companies on this date
-        long_return = long_crsp['ret'].mean() if not long_crsp.empty else 0
-        short_return = short_crsp['ret'].mean() if not short_crsp.empty else 0
-
-        # Calculate the long-short strategy return (long - short)
-        long_short_return = long_return - short_return
-
-        # Append the returns to the respective lists
-        strategy_returns['date'].append(date)
-        strategy_returns['long'].append(long_return)
-        strategy_returns['short'].append(short_return)
-        strategy_returns['long_short'].append(long_short_return)
-
-    # Convert to DataFrame for easier manipulation
-    strategy_returns_df = pd.DataFrame(strategy_returns)
-
-    return strategy_returns_df
-
-
-
-
-
-
-
-piotroski_scores = funda[['cusip', 'datadate', 'Score']].drop_duplicates()
-
-# Filter out rows with missing years
-piotroski_scores = piotroski_scores[piotroski_scores[''].notna()]
-
-# Convert date to string and extract year for merging
-crsp['year'] = crsp['date'].astype(str).str[:4].astype(int)
-
-# Debug: Check for missing years
-print("Years in Piotroski Scores:")
-print(piotroski_scores['fyear'].unique())
-
-print("Years in CRSP Data:")
-print(crsp['year'].unique())
-
-# Ensure CUSIP is string type and clean
-crsp['cusip'] = crsp['cusip'].astype(str).str.strip()
-piotroski_scores['cusip'] = piotroski_scores['cusip'].astype(str).str.strip()
-
-# Ensure all CUSIPs are 8 characters long
-crsp['cusip'] = crsp['cusip'].str[:8]
-piotroski_scores['cusip'] = piotroski_scores['cusip'].str[:8]
-
-# Check the overlap in CUSIP between the two datasets
-common_cusips = set(crsp['cusip']).intersection(set(piotroski_scores['cusip']))
-print(f"Number of common CUSIPs: {len(common_cusips)}")
-print("Sample common CUSIPs:", list(common_cusips)[:5])
-
-# Merge Piotroski Scores with Stock Prices by CUSIP
-merged_data = pd.merge(crsp, piotroski_scores, how='left', left_on=['cusip', 'year'], right_on=['cusip', 'fyear'])
-
-# Debug: Check merged data for any NaNs
-print("Merged Data Head:")
-print(merged_data.head())
-
-print("Missing values in Merged Data:")
-print(merged_data.isna().sum())
-
-### Here, some critical issues might arise:
-
-#	•	CUSIP Handling: Ensure that all CUSIPs are 8 characters long and correctly match between datasets. This is done correctly with the cleaning steps, but merging based on CUSIP and year can still lead to missing values if the data does not align perfectly.
-#	•	Missing Data: You handle missing Piotroski scores by filling them with the mean, which might distort the results. Instead, consider filtering out rows with missing values, or performing an imputation based on more contextually relevant statistics.
-# Handle any missing Piotroski scores
-merged_data['piotroski'] = merged_data['piotroski'].ffill()
-
-# Debug: Print merged data summary
-print("Merged Data Summary:")
-print(merged_data.describe())
-
-portfolio_returns = []
-portfolio_long = []
-portfolio_short = []
-dates = []
-# Function to calculate daily returns for the portfolio with progress bar
-def calculate_daily_portfolio_returns(df):
-    # Initialize lists to store daily returns
+    # Initialize portfolios
+    long_portfolio = {}  # {cusip: {'score': Score, 'entry_date': datadate, 'last_traded_date': date}}
+    short_portfolio = {}
     portfolio_returns = []
-    portfolio_long = []
-    portfolio_short = []
     dates = []
 
-    # Precompute top and bottom quintiles for each year
-    df['quintile'] = df.groupby('year')['piotroski'].transform(lambda x: pd.qcut(x, 5, labels=False, duplicates='drop'))
+    # Create a list of all trading dates
+    trading_dates = crsp['date'].sort_values().unique()
 
-    # Precompute long and short portfolios for each year
-    long_portfolios = {}
-    short_portfolios = {}
+    # Initialize DataFrame to store cumulative returns
+    strategy_returns = pd.DataFrame(index=trading_dates, columns=['long_return', 'short_return', 'long_short_return'])
 
-    for year in df['year'].unique():
-        yearly_data = df[df['year'] == year]
-        max_score =  yearly_data['piotroski'].max()
-        # Define long and short portfolios
-        # long_portfolios[year] = yearly_data[yearly_data['quintile'] == 4]['cusip'].unique().tolist()
-        long_portfolios[year] = yearly_data[yearly_data['piotroski'] == max_score]['cusip'].unique().tolist()
-        short_portfolios[year] = yearly_data[yearly_data['quintile'] == 0]['cusip'].unique().tolist()
+    # Initialize a DataFrame to keep track of current scores for all companies
+    company_scores = pd.DataFrame(columns=['cusip', 'score', 'datadate'])
+    company_scores.set_index('cusip', inplace=True)
 
-    # Print out the long and short portfolios for each year
-    print("Long and Short Portfolios by Year:")
-    for year in sorted(long_portfolios.keys()):
-        print(f"\nYear: {year}")
-        print(f"Long Portfolios: {long_portfolios[year]}")
-        print(f"Short Portfolios: {short_portfolios[year]}")
 
-    # Calculate daily returns based on precomputed portfolios
-    for date in tqdm(df['date'].unique(), desc="Processing Dates"):
-        daily_data = df[df['date'] == date]
-        year = pd.to_datetime(date).year
+    # Function to remove inactive holdings
+    def remove_inactive_holdings(portfolio, current_date):
+        to_remove = []
+        for cusip, info in portfolio.items():
+            days_inactive = (current_date - info['last_traded_date']).days
+            if days_inactive > INACTIVITY_THRESHOLD:
+                to_remove.append(cusip)
+        for cusip in to_remove:
+            del portfolio[cusip]
 
-        long_cusips = long_portfolios.get(year, [])
-        short_cusips = short_portfolios.get(year, [])
 
-        # Calculate mean returns for long and short positions
-        long_returns = daily_data[daily_data['cusip'].isin(long_cusips)]['ret'].mean()
-        short_returns = daily_data[daily_data['cusip'].isin(short_cusips)]['ret'].mean()
+    # Process each trading date
+    for current_date in tqdm(trading_dates, desc="Processing Trading Dates"):
+        # Check if any new reports were released on this date
+        new_reports = funda[funda['datadate'] == current_date]
 
-        # Handle potential NaNs in returns
-        long_returns = 0 if np.isnan(long_returns) else long_returns
-        short_returns = 0 if np.isnan(short_returns) else short_returns
+        # Update company_scores with new reports
+        if not new_reports.empty:
+            for idx, row in new_reports.iterrows():
+                cusip = row['cusip']
+                score = row['Score']
+                datadate = row['datadate']
+                company_scores.loc[cusip] = {'score': score, 'datadate': datadate}
 
-        # Calculate the daily portfolio return
-        daily_portfolio_return = (1 + long_returns) - (1 + short_returns)
+        # Build the portfolios based on current company_scores
+        if not company_scores.empty:
+            # Get the top 20 and bottom 20 companies by score
+            sorted_scores = company_scores.sort_values(by=['score', 'datadate'], ascending=[False, True])
+            top_companies = sorted_scores.head(PORTFOLIO_SIZE)
+            bottom_companies = sorted_scores.tail(PORTFOLIO_SIZE)
 
-        # Append daily returns to the lists
-        portfolio_long.append(1 + long_returns)
-        portfolio_short.append(1 + short_returns)
-        portfolio_returns.append(1 + daily_portfolio_return)
-        dates.append(date)
+            # Update or add companies to long portfolio
+            for cusip in top_companies.index:
+                score = top_companies.loc[cusip, 'score']
+                datadate = top_companies.loc[cusip, 'datadate']
+                if cusip not in long_portfolio:
+                    long_portfolio[cusip] = {
+                        'score': score,
+                        'entry_date': current_date,
+                        'last_traded_date': current_date  # Initialize with current date
+                    }
+                else:
+                    long_portfolio[cusip]['score'] = score  # Update score if it has changed
 
-    # Convert to cumulative returns (product instead of sum to avoid overflow)
-    portfolio_returns = np.cumprod(portfolio_returns)
-    portfolio_long = np.cumprod(portfolio_long)
-    portfolio_short = np.cumprod(portfolio_short)
+            # Update or add companies to short portfolio
+            for cusip in bottom_companies.index:
+                score = bottom_companies.loc[cusip, 'score']
+                datadate = bottom_companies.loc[cusip, 'datadate']
+                if cusip not in short_portfolio:
+                    short_portfolio[cusip] = {
+                        'score': score,
+                        'entry_date': current_date,
+                        'last_traded_date': current_date  # Initialize with current date
+                    }
+                else:
+                    short_portfolio[cusip]['score'] = score  # Update score if it has changed
+        else:
+            long_portfolio = {}
+            short_portfolio = {}
 
-    return dates, portfolio_returns, portfolio_long, portfolio_short
+        # Remove inactive holdings from portfolios
+        remove_inactive_holdings(long_portfolio, current_date)
+        remove_inactive_holdings(short_portfolio, current_date)
 
-dates, portfolio_returns, portfolio_long, portfolio_short = calculate_daily_portfolio_returns(merged_data)
+        # Calculate daily returns for current portfolios
+        crsp_today = crsp[crsp['date'] == current_date]
 
-# Plot the results
-plt.figure(figsize=(10, 6))
-plt.plot(dates, portfolio_returns, label='Portfolio Returns', color='blue')
-plt.plot(dates, portfolio_long, label='Long Positions', color='green')
-plt.plot(dates, portfolio_short, label='Short Positions', color='red')
+        # Long positions
+        long_cusips = list(long_portfolio.keys())
+        long_returns = crsp_today[crsp_today['cusip'].isin(long_cusips)]['ret']
+        avg_long_return = long_returns.mean() if not long_returns.empty else 0
 
-# Adding title and labels
-plt.title('Cumulative Log Returns of Long-Short Piotroski Strategy (Efficient Looping)')
-plt.xlabel('Date')
-plt.ylabel('Cumulative Log Return')
+        # Short positions
+        short_cusips = list(short_portfolio.keys())
+        short_returns = crsp_today[crsp_today['cusip'].isin(short_cusips)]['ret']
+        avg_short_return = short_returns.mean() if not short_returns.empty else 0
 
-# Adding grid and legend
-plt.grid(True)
-plt.legend()
+        # Update last traded date for companies that traded today
+        traded_cusips = crsp_today['cusip'].unique()
 
-plt.savefig('portfolio_returns.png')
-plt.show()
+        for cusip in long_portfolio.keys():
+            if cusip in traded_cusips:
+                long_portfolio[cusip]['last_traded_date'] = current_date
 
+        for cusip in short_portfolio.keys():
+            if cusip in traded_cusips:
+                short_portfolio[cusip]['last_traded_date'] = current_date
+
+        # Calculate net portfolio return (sum of long and short profits)
+        net_return = avg_long_return - avg_short_return
+
+        # Store returns
+        strategy_returns.loc[current_date, 'long_return'] = avg_long_return + 1
+        strategy_returns.loc[current_date, 'short_return'] = avg_short_return + 1  # This is already profit from shorts
+        strategy_returns.loc[current_date, 'long_short_return'] = net_return + 1
+
+    # Fill any missing values with 1
+    strategy_returns = strategy_returns.fillna(1)
+
+    # Calculate cumulative returns
+    strategy_returns['long_cum'] = (strategy_returns['long_return']).cumprod()
+    strategy_returns['short_cum'] = (strategy_returns['short_return']).cumprod()
+    strategy_returns['long_short_cum'] = (strategy_returns['long_short_return']).cumprod()
+
+    # Convert cumulative returns to percentages
+    strategy_returns['long_cum_pct'] = strategy_returns['long_cum'] * 100
+    strategy_returns['short_cum_pct'] = strategy_returns['short_cum'] * 100
+    strategy_returns['long_short_cum_pct'] = strategy_returns['long_short_cum'] * 100
+
+    # Plot cumulative returns
+    Plotter.plot_strategy_returns(strategy_returns)
