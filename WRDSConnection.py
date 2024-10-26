@@ -13,6 +13,7 @@ class WRDSConnection:
         self.db = wrds.Connection(wrds_username=username, wrds_password=password)
 
     def fetch_fundamental_data(self, start_date, end_date):
+        print('Fetching fundamental data')
         funda_query = f"""
             SELECT gvkey, datadate, fyear, fic, tic,
                    at, lt, pstkl, txditc, pstkrv,
@@ -29,6 +30,7 @@ class WRDSConnection:
         return self.db.raw_sql(funda_query)
 
     def fetch_crsp_data(self, start_date, end_date):
+        print('Fetching crsp data')
         crsp_query = f"""
             SELECT permno, date, ret, prc, shrout, cusip
             FROM crsp.dsf
