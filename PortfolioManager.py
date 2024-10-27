@@ -1,10 +1,12 @@
 import pandas as pd
 
+
 class PortfolioManager:
-    def __init__(self, inactivity_threshold, portfolio_size):
+    def __init__(self, inactivity_threshold, long_portfolio_size, short_portfolio_size):
         self.inactivity_threshold = inactivity_threshold
-        self.portfolio_size = portfolio_size
-        self.long_portfolio = {}   # {cusip: {'score': Score, 'entry_date': date, 'last_traded_date': date}}
+        self.long_portfolio_size = long_portfolio_size
+        self.short_portfolio_size = short_portfolio_size
+        self.long_portfolio = {}  # {cusip: {'score': Score, 'entry_date': date, 'last_traded_date': date}}
         self.short_portfolio = {}
         self.company_scores = pd.DataFrame(columns=['cusip', 'score', 'datadate'])
         self.company_scores.set_index('cusip', inplace=True)
@@ -23,14 +25,22 @@ class PortfolioManager:
             cusip = row['cusip']
             score = row['Score']
             datadate = row['datadate']
-            self.company_scores.loc[cusip] = {'score': score, 'datadate': datadate}
+            # Check if the cusip already exists in company_scores
+            if cusip in self.company_scores.index:
+                # Update only if the new datadate is more recent than the existing one
+                if datadate > self.company_scores.loc[cusip, 'datadate']:
+                    self.company_scores.loc[cusip] = {'score': score, 'datadate': datadate}
+            else:
+                # Add new entry if the cusip does not exist
+                self.company_scores.loc[cusip] = {'score': score, 'datadate': datadate}
+        a = 1
 
-    def build_portfolios(self, current_date):
+    def build_portfolios(self, current_date, long_portfolio_size, short_portfolio_size):
         if not self.company_scores.empty:
-            # Get the top and bottom companies by score
+            # Get the top companies by score
             sorted_scores = self.company_scores.sort_values(by=['score', 'datadate'], ascending=[False, True])
-            top_companies = sorted_scores.head(self.portfolio_size)
-            bottom_companies = sorted_scores.tail(self.portfolio_size)
+            top_companies = sorted_scores.head(long_portfolio_size)
+            bottom_companies = sorted_scores.tail(short_portfolio_size)
 
             # Update or add companies to long portfolio
             self._update_portfolio(self.long_portfolio, top_companies, current_date)
@@ -53,6 +63,7 @@ class PortfolioManager:
                 }
             else:
                 portfolio[cusip]['score'] = score  # Update score if it has changed
+                portfolio[cusip]['last_traded_date'] = current_date  # Update last traded date to current
 
     def remove_inactive_holdings_from_portfolios(self, current_date):
         self.remove_inactive_holdings(self.long_portfolio, current_date)

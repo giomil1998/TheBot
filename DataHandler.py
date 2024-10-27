@@ -1,5 +1,5 @@
+import os
 import pandas as pd
-
 from EnvironmentLoader import EnvironmentLoader
 from WRDSConnection import WRDSConnection
 
@@ -15,15 +15,18 @@ class DataHandler:
 
         print("Calculating Piotroski Scores")
         DataHandler.add_piotroski_column_to_funda(funda)
-
+        # Ensure the 'data' directory exists, create it if not
+        data_dir = "data"
+        if not os.path.exists(data_dir):
+            os.makedirs(data_dir)
         print("Saving data")
-        funda.to_csv("data/funda.csv")
-        crsp.to_csv("data/crsp.csv")
+        funda.to_csv(os.path.join(data_dir, "funda.csv"))
+        crsp.to_csv(os.path.join(data_dir, "crsp.csv"))
         return funda, crsp
 
     @staticmethod
     def add_piotroski_column_to_funda(df):
-        return df.groupby('cusip').apply(DataHandler.calculate_piotroski(df)).reset_index(drop=True)
+        return df.groupby('cusip').apply(DataHandler.calculate_piotroski).reset_index(drop=True)
 
     # Process Fundamental Data to Calculate Piotroski Score
     @staticmethod
@@ -59,9 +62,10 @@ class DataHandler:
         return funda, crsp
 
     @staticmethod
-    def clean_funda(funda):
+    def clean_funda(funda, start_date, end_date):
         """Clean the funda DataFrame by removing duplicates, filtering missing years, and cleaning CUSIP."""
         print("Cleaning funda dataframe")
+        funda = filter_time_range(funda, "datadate", start_date, end_date)
         funda = DataHandler.filter_duplicates(funda)
         funda = DataHandler.filter_missing_years(funda)
         funda = DataHandler.standardize_cusips(funda, 'cusip')
@@ -70,9 +74,10 @@ class DataHandler:
         return funda
 
     @staticmethod
-    def clean_crsp(crsp):
+    def clean_crsp(crsp, start_date, end_date):
         """Clean the crsp DataFrame by ensuring CUSIPs are 8 characters long and strings."""
         print("Cleaning crsp dataframe")
+        crsp = filter_time_range(crsp, "date", start_date, end_date)
         crsp = DataHandler.standardize_cusips(crsp, 'cusip')
         crsp = DataHandler.standardize_date(crsp, 'date')
         return crsp
@@ -84,18 +89,22 @@ class DataHandler:
 
     @staticmethod
     def filter_missing_years(df):
-        """Filters out rows with missing data."""
-        return df[df['at'].notna()]
+        """Filters out rows with missing values in columns used to calculate score."""
+        return df.dropna(subset=['roa', 'cfo', 'delta_leverage', 'delta_margin', 'delta_turn'])
 
     @staticmethod
     def standardize_cusips(df, cusip_column):
         """Ensure that the CUSIP column contains strings of 8 characters, trimming and formatting as necessary."""
-        df[cusip_column] = df[cusip_column].astype(str).str.strip()
-        df[cusip_column] = df[cusip_column].str[:8]
+        df.loc[:, cusip_column] = df[cusip_column].astype(str).str.strip()  # Converts CUSIP codes into strings and trims spaces
+        df.loc[:, cusip_column] = df[cusip_column].str[:8]  # Keeps first 8 characters
+        #TODO: Check matching with cusip codes longer than 8 digits.
         return df
 
     @staticmethod
     def standardize_date(df, date_column):
         """Ensure that the date column contains datetime objects."""
-        df[date_column] = pd.to_datetime(df[date_column], errors='coerce')  # Coerce invalid dates to NaT
+        df.loc[:, date_column] = pd.to_datetime(df[date_column], errors='coerce')  # Coerce invalid dates to NaT
         return df
+
+def filter_time_range(funda, column_name, start_date, end_date):
+    return funda[(funda[column_name] >= start_date) & (funda[column_name] <= end_date)]

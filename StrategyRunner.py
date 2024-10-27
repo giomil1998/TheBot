@@ -5,18 +5,25 @@ from PortfolioManager import PortfolioManager
 
 
 class StrategyRunner:
-    def __init__(self, funda, crsp, inactivity_threshold, portfolio_size):
+    def __init__(self, funda, crsp, inactivity_threshold, long_portfolio_size, short_portfolio_size):
         self.funda = funda
         self.crsp = crsp
         self.inactivity_threshold = inactivity_threshold
-        self.portfolio_size = portfolio_size
-        self.portfolio_manager = PortfolioManager(inactivity_threshold, portfolio_size)
+        self.long_portfolio_size = long_portfolio_size
+        self.short_portfolio_size = short_portfolio_size
+        self.portfolio_manager = PortfolioManager(inactivity_threshold, long_portfolio_size, short_portfolio_size)
 
         # Create a list of all trading dates
         self.trading_dates = crsp['date'].sort_values().unique()
-
+        self.rebalancing_dates = funda['datadate'].sort_values().unique()
         # Initialize DataFrame to store cumulative returns
-        self.strategy_returns = pd.DataFrame(index=self.trading_dates, columns=['long_return', 'short_return', 'long_short_return'])
+        self.strategy_returns = pd.DataFrame(index=self.trading_dates,
+                                             columns=['long_return', 'short_return', 'long_short_return'])
+        # Initialize DataFrame to store long and short cusips at each rebalancing date
+        self.portfolio_tickers = pd.DataFrame(columns=['long_tickers', 'short_tickers'], index=self.rebalancing_dates)
+        #TODO: Move to data
+        # Create a dictionary mapping cusip to tic (ticker)
+        self.cusip_to_tic = funda[['cusip', 'tic']].drop_duplicates().set_index('cusip')['tic']
 
     def run_strategy(self):
         for current_date in tqdm(self.trading_dates, desc="Processing Trading Dates"):
@@ -26,12 +33,21 @@ class StrategyRunner:
             # Update company_scores with new reports
             if not new_reports.empty:
                 self.portfolio_manager.update_company_scores(new_reports)
-
-            # Build the portfolios based on current company_scores
-            self.portfolio_manager.build_portfolios(current_date)
+                # Build the portfolios based on current company_scores
+                self.portfolio_manager.build_portfolios(current_date, self.long_portfolio_size, self.short_portfolio_size)
 
             # Remove inactive holdings from portfolios
             self.portfolio_manager.remove_inactive_holdings_from_portfolios(current_date)
+
+            # Get current portfolios (long and short cusips)
+            long_cusips, short_cusips = self.portfolio_manager.get_current_portfolios()
+
+            # Map cusips to tickers using the cusip_to_tic dictionary
+            long_tickers = self.cusip_to_tic.loc[long_cusips].dropna().tolist()
+            short_tickers = self.cusip_to_tic.loc[short_cusips].dropna().tolist()
+
+            # Store the portfolios for the current rebalancing date
+            self.portfolio_tickers.loc[current_date] = [long_tickers, short_tickers]
 
             # Calculate daily returns for current portfolios
             self.calculate_daily_returns(current_date)
@@ -71,9 +87,8 @@ class StrategyRunner:
         self.strategy_returns['short_cum'] = self.strategy_returns['short_return'].cumprod()
         self.strategy_returns['long_short_cum'] = self.strategy_returns['long_short_return'].cumprod()
 
-        # Convert cumulative returns to percentages
-        self.strategy_returns['long_cum_pct'] = self.strategy_returns['long_cum'] * 100
-        self.strategy_returns['short_cum_pct'] = self.strategy_returns['short_cum'] * 100
-        self.strategy_returns['long_short_cum_pct'] = self.strategy_returns['long_short_cum'] * 100
-
         return self.strategy_returns
+
+    def save_portfolio_tickers(self, file_path='portfolio_tickers.csv'):
+        """Save the long and short portfolios (tickers) with rebalancing dates."""
+        self.portfolio_tickers.to_csv(file_path)
