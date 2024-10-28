@@ -95,16 +95,16 @@ class DataHandler:
     @staticmethod
     def standardize_cusips(df, cusip_column):
         """Ensure that the CUSIP column contains strings of 8 characters, trimming and formatting as necessary."""
-        df.loc[:, cusip_column] = df[cusip_column].astype(str).str.strip()  # Converts CUSIP codes into strings and trims spaces
-        df.loc[:, cusip_column] = df[cusip_column].str[:8]  # Keeps first 8 characters
+        df[cusip_column] = df[cusip_column].astype(str).str.strip()  # Converts CUSIP codes into strings and trims spaces
+        df[cusip_column] = df[cusip_column].str[:8]  # Keeps first 8 characters
         #TODO: Check matching with cusip codes longer than 8 digits.
         return df
 
     @staticmethod
     def standardize_date(df, date_column):
         """Ensure that the date column contains datetime objects."""
-        df.loc[:, date_column] = pd.to_datetime(df[date_column], errors='coerce')  # Coerce invalid dates to NaT
+        df[date_column] = pd.to_datetime(df[date_column], errors='coerce')  # Coerce invalid dates to NaT
         return df
 
 def filter_time_range(funda, column_name, start_date, end_date):
-    return funda[(funda[column_name] >= start_date) & (funda[column_name] <= end_date)]
+    return funda[(funda[column_name] >= start_date) & (funda[column_name] <= end_date)].copy()
