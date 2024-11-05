@@ -16,6 +16,4 @@ class Plotter:
         plt.legend()
         plt.grid(True)
 
-        # Format Y-axis as percentage
-        plt.gca().yaxis.set_major_formatter(mtick.PercentFormatter())
         plt.show()

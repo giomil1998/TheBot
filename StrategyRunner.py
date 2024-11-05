@@ -5,15 +5,16 @@ from PortfolioManager import PortfolioManager
 
 
 class StrategyRunner:
-    def __init__(self, funda, crsp, inactivity_threshold, long_portfolio_size, short_portfolio_size):
+    def __init__(self, funda, crsp, inactivity_threshold, long_portfolio_size, short_portfolio_size, start_date, end_date, portfolio_update_delay):
         self.funda = funda
         self.crsp = crsp
         self.inactivity_threshold = inactivity_threshold
+        self.portfolio_update_delay = portfolio_update_delay
         self.long_portfolio_size = long_portfolio_size
         self.short_portfolio_size = short_portfolio_size
         self.portfolio_manager = PortfolioManager(inactivity_threshold, long_portfolio_size, short_portfolio_size)
 
-        # Create a list of all trading dates
+        self.all_dates = pd.date_range(start=start_date, end=end_date, freq='D')
         self.trading_dates = crsp['date'].sort_values().unique()
         self.rebalancing_dates = funda['datadate'].sort_values().unique()
         # Initialize DataFrame to store cumulative returns
@@ -26,28 +27,31 @@ class StrategyRunner:
         self.cusip_to_tic = funda[['cusip', 'tic']].drop_duplicates().set_index('cusip')['tic']
 
     def run_strategy(self):
-        for current_date in tqdm(self.trading_dates, desc="Processing Trading Dates"):
+        for current_date in tqdm(self.all_dates, desc="Processing Trading Dates"):
             # Check if any new reports were released on this date
-            new_reports = self.funda[self.funda['datadate'] == current_date]
+            lagged_date = current_date - pd.Timedelta(days=self.portfolio_update_delay)
+            new_reports = self.funda[self.funda['datadate'] == lagged_date]
 
-            # Update company_scores with new reports
             if not new_reports.empty:
-                self.portfolio_manager.update_company_scores(new_reports)
-                # Build the portfolios based on current company_scores
-                self.portfolio_manager.build_portfolios(current_date, self.long_portfolio_size, self.short_portfolio_size)
+                # Update company_scores with new reports as of the lagged date
+                self.portfolio_manager.update_company_scores(new_reports, lagged_date)
+
+                # Build the portfolios as of the lagged date
+                self.portfolio_manager.build_portfolios(current_date, self.long_portfolio_size,
+                                                        self.short_portfolio_size)
+
+                # Get current portfolios (long and short cusips)
+                long_cusips, short_cusips = self.portfolio_manager.get_current_portfolios()
+
+                # Map cusips to tickers using the cusip_to_tic dictionary
+                long_tickers = self.cusip_to_tic.loc[long_cusips].dropna().tolist()
+                short_tickers = self.cusip_to_tic.loc[short_cusips].dropna().tolist()
+
+                # Store the portfolios for the current rebalancing date
+                self.portfolio_tickers.loc[lagged_date] = [long_tickers, short_tickers]
 
             # Remove inactive holdings from portfolios
             self.portfolio_manager.remove_inactive_holdings_from_portfolios(current_date)
-
-            # Get current portfolios (long and short cusips)
-            long_cusips, short_cusips = self.portfolio_manager.get_current_portfolios()
-
-            # Map cusips to tickers using the cusip_to_tic dictionary
-            long_tickers = self.cusip_to_tic.loc[long_cusips].dropna().tolist()
-            short_tickers = self.cusip_to_tic.loc[short_cusips].dropna().tolist()
-
-            # Store the portfolios for the current rebalancing date
-            self.portfolio_tickers.loc[current_date] = [long_tickers, short_tickers]
 
             # Calculate daily returns for current portfolios
             self.calculate_daily_returns(current_date)

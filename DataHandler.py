@@ -65,11 +65,12 @@ class DataHandler:
     def clean_funda(funda, start_date, end_date):
         """Clean the funda DataFrame by removing duplicates, filtering missing years, and cleaning CUSIP."""
         print("Cleaning funda dataframe")
+        funda = DataHandler.standardize_date(funda, 'datadate')
+        funda = DataHandler.drop_first_year_of_each_ticker(funda)
         funda = filter_time_range(funda, "datadate", start_date, end_date)
         funda = DataHandler.filter_duplicates(funda)
         funda = DataHandler.filter_missing_years(funda)
         funda = DataHandler.standardize_cusips(funda, 'cusip')
-        funda = DataHandler.standardize_date(funda, 'datadate')
         funda = funda.sort_values('datadate')
         return funda
 
@@ -105,6 +106,17 @@ class DataHandler:
         """Ensure that the date column contains datetime objects."""
         df[date_column] = pd.to_datetime(df[date_column], errors='coerce')  # Coerce invalid dates to NaT
         return df
+
+    @staticmethod
+    def drop_first_year_of_each_ticker(funda):
+        """Drop the earliest row for each ticker (tic) in the funda DataFrame."""
+        # Sort by 'datadate' to ensure the earliest dates are at the top for each 'tic'
+        funda = funda.sort_values(by=['tic', 'datadate'])
+
+        # Drop the first occurrence of each 'tic' and keep the rest
+        funda = funda.groupby('tic').apply(lambda x: x.iloc[1:]).reset_index(drop=True)
+
+        return funda
 
 def filter_time_range(funda, column_name, start_date, end_date):
     return funda[(funda[column_name] >= start_date) & (funda[column_name] <= end_date)].copy()
