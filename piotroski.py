@@ -3,12 +3,12 @@ from Plotter import Plotter
 from StrategyRunner import StrategyRunner
 
 if __name__ == "__main__":
-    START_DATE = '2018-01-01'
+    START_DATE = '2013-01-01'
     END_DATE = '2024-11-01'
-    long_portfolio_size = 20  # Maximum number of positions in long portfolio
+    long_portfolio_size = 15  # Maximum number of positions in long portfolio
     short_portfolio_size = 10  # Maximum number of positions in short portfolio
     INACTIVITY_THRESHOLD = 30  # Number of consecutive days below market cap threshold
-    MARKET_CAP_THRESHOLD = 2_000_000_000  # Minimum market cap in dollars
+    MARKET_CAP_THRESHOLD = 1_000_000_000  # Minimum market cap in dollars
     PORTFOLIO_UPDATE_DELAY = 1  # Number of days before the data in a report is used to update portfolios
     GET_NEW_DATA = True
 
