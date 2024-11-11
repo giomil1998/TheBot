@@ -2,6 +2,7 @@ import os
 import pandas as pd
 from EnvironmentLoader import EnvironmentLoader
 from WRDSConnection import WRDSConnection
+from datetime import datetime
 
 class DataHandler:
     @staticmethod
@@ -67,6 +68,7 @@ class DataHandler:
         print("Cleaning funda dataframe")
         funda = DataHandler.standardize_date(funda, 'datadate')
         funda = DataHandler.drop_first_year_of_each_ticker(funda)
+        funda = DataHandler.add_piotroski_column_to_funda(funda)
         funda = filter_time_range(funda, "datadate", start_date, end_date)
         funda = DataHandler.filter_duplicates(funda)
         funda = DataHandler.filter_missing_years(funda)
@@ -75,12 +77,40 @@ class DataHandler:
         return funda
 
     @staticmethod
-    def clean_crsp(crsp, start_date, end_date):
-        """Clean the crsp DataFrame by ensuring CUSIPs are 8 characters long and strings."""
+    def clean_crsp(crsp, start_date, end_date, market_cap_threshold=1_000_000_000, inactivity_threshold=30):
+        """Clean the crsp DataFrame by ensuring CUSIPs are standardized and filtering by market cap."""
         print("Cleaning crsp dataframe")
-        crsp = filter_time_range(crsp, "date", start_date, end_date)
+
+        # Filter data within the time range
+        crsp = filter_time_range(crsp, "date", pd.to_datetime(start_date).date(), pd.to_datetime(end_date).date())
+
+        # Standardize CUSIPs and dates
         crsp = DataHandler.standardize_cusips(crsp, 'cusip')
         crsp = DataHandler.standardize_date(crsp, 'date')
+
+        # Calculate market capitalization
+        crsp['market_cap'] = crsp['prc'] * crsp['shrout'] * 1000  # shrout is in thousands
+
+        # Filter companies with market cap below threshold for too many consecutive days
+        def filter_below_threshold(group):
+            # Boolean series: True if below threshold
+            below_threshold = group['market_cap'] < market_cap_threshold
+
+            # Identify streaks of consecutive days below threshold
+            streak_groups = (below_threshold != below_threshold.shift()).cumsum()
+            max_streak = below_threshold.groupby(streak_groups).transform('sum').max()
+
+            # Drop group if max streak exceeds inactivity threshold
+            if max_streak > inactivity_threshold:
+                return None
+            return group
+
+        # Apply the filter by group
+        crsp = crsp.groupby('cusip').apply(filter_below_threshold)
+
+        # Drop invalid groups and reset the index
+        crsp = crsp.dropna(subset=['cusip']).reset_index(drop=True)
+
         return crsp
 
     @staticmethod
