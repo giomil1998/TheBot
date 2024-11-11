@@ -1,4 +1,5 @@
 import pandas as pd
+from scipy.optimize import minimize
 
 
 class PortfolioManager:
@@ -6,17 +7,14 @@ class PortfolioManager:
         self.inactivity_threshold = inactivity_threshold
         self.long_portfolio_size = long_portfolio_size
         self.short_portfolio_size = short_portfolio_size
-        self.long_portfolio = {}  # {cusip: {'score': Score, 'entry_date': date, 'last_traded_date': date}}
+        self.long_portfolio = {}  # {cusip: {'score': Score, 'entry_date': date, 'last_traded_date': date, 'weight': weight}}
         self.short_portfolio = {}
         self.company_scores = pd.DataFrame(columns=['cusip', 'score', 'datadate'])
         self.company_scores.set_index('cusip', inplace=True)
 
     def purge_inactive_from_company_scores(self, current_date):
         """Purge companies from company_scores if they haven't published reports for over a year."""
-        # Calculate the date exactly one year before the current date
         yearly_inactivity_cutoff = current_date - pd.DateOffset(years=1)
-
-        # Identify companies in company_scores that haven't published a report for over a year
         inactive_companies = self.company_scores[self.company_scores['datadate'] < yearly_inactivity_cutoff].index
         self.company_scores.drop(inactive_companies, inplace=True)
 
@@ -37,52 +35,85 @@ class PortfolioManager:
         for idx, row in new_reports.iterrows():
             cusip = row['cusip']
             score = row['Score']
-            # Check if the cusip already exists in company_scores
             if cusip in self.company_scores.index:
-                # Update only if the new datadate is more recent than the existing one
                 if current_date > self.company_scores.loc[cusip, 'datadate']:
                     self.company_scores.loc[cusip] = {'score': score, 'datadate': current_date}
             else:
-                # Add new entry if the cusip does not exist
                 self.company_scores.loc[cusip] = {'score': score, 'datadate': current_date}
 
-    def build_portfolios(self, current_date, long_portfolio_size, short_portfolio_size):
+    def build_portfolios(self, current_date, long_portfolio_size, short_portfolio_size, crsp, lookback_days=60, method="inverse_volatility"):
         if not self.company_scores.empty:
-            # Get the top companies by score
             sorted_scores = self.company_scores.sort_values(by=['score', 'datadate'], ascending=[False, True])
             top_companies = sorted_scores.head(long_portfolio_size)
             bottom_companies = sorted_scores.tail(short_portfolio_size)
 
-            self.long_portfolio = self._update_portfolio(self.long_portfolio, top_companies, current_date)
-            self.short_portfolio = self._update_portfolio(self.short_portfolio, bottom_companies, current_date)
+            volatilities = self.calculate_historical_volatility(crsp, lookback_days, current_date)
+
+            if method == "inverse_volatility":
+                long_weights = self.calculate_inverse_volatility_weights(volatilities, top_companies.index)
+                short_weights = self.calculate_inverse_volatility_weights(volatilities, bottom_companies.index)
+            elif method == "minimum_variance":
+                cov_matrix_long = self.calculate_covariance_matrix(crsp, top_companies.index, lookback_days, current_date)
+                cov_matrix_short = self.calculate_covariance_matrix(crsp, bottom_companies.index, lookback_days, current_date)
+                long_weights = self.calculate_minimum_variance_weights(cov_matrix_long)
+                short_weights = self.calculate_minimum_variance_weights(cov_matrix_short)
+
+            self.long_portfolio = self._update_portfolio(self.long_portfolio, top_companies, long_weights, current_date)
+            self.short_portfolio = self._update_portfolio(self.short_portfolio, bottom_companies, short_weights, current_date)
         else:
             self.long_portfolio = {}
             self.short_portfolio = {}
 
-    def _update_portfolio(self, existing_portfolio, companies, current_date):
-        """Create a new portfolio based on the given companies, retaining last_traded_date for existing entries."""
+    def calculate_historical_volatility(self, crsp, lookback_days, current_date):
+        """Calculate historical volatility for companies."""
+        lookback_start = current_date - pd.Timedelta(days=lookback_days)
+        historical_data = crsp[(crsp['date'] >= lookback_start) & (crsp['date'] < current_date)]
+        volatilities = historical_data.groupby('cusip')['ret'].std()
+        return volatilities
+
+    def calculate_inverse_volatility_weights(self, volatilities, cusips):
+        """Assign weights inversely proportional to volatilities."""
+        filtered_volatilities = volatilities[volatilities.index.isin(cusips)]
+        weights = 1 / filtered_volatilities
+        return weights / weights.sum()
+
+    def calculate_covariance_matrix(self, crsp, cusips, lookback_days, current_date):
+        """Calculate covariance matrix for selected stocks."""
+        lookback_start = current_date - pd.Timedelta(days=lookback_days)
+        historical_data = crsp[(crsp['date'] >= lookback_start) & (crsp['date'] < current_date)]
+        filtered_data = historical_data[historical_data['cusip'].isin(cusips)]
+        pivot_data = filtered_data.pivot(index='date', columns='cusip', values='ret').fillna(0)
+        return pivot_data.cov()
+
+    def calculate_minimum_variance_weights(self, cov_matrix):
+        """Solve for minimum variance portfolio weights."""
+        n = len(cov_matrix)
+        initial_weights = np.ones(n) / n
+        constraints = ({'type': 'eq', 'fun': lambda w: np.sum(w) - 1})
+        bounds = [(0, 1) for _ in range(n)]
+
+        def portfolio_variance(w):
+            return np.dot(w.T, np.dot(cov_matrix, w))
+
+        result = minimize(portfolio_variance, initial_weights, bounds=bounds, constraints=constraints)
+        return result.x if result.success else None
+
+    def _update_portfolio(self, existing_portfolio, companies, weights, current_date):
+        """Update portfolio with weights."""
         new_portfolio = {}
-
-        for cusip in companies.index:
+        for cusip, weight in zip(companies.index, weights):
             score = companies.loc[cusip, 'score']
-
-            # Retain the last_traded_date if the company is already in the existing portfolio
-            if cusip in existing_portfolio:
-                last_traded_date = existing_portfolio[cusip]['last_traded_date']
-            else:
-                # Initialize last_traded_date to current_date if it's a new entry
-                last_traded_date = current_date
-
+            last_traded_date = existing_portfolio.get(cusip, {}).get('last_traded_date', current_date)
             new_portfolio[cusip] = {
                 'score': score,
+                'weight': weight,
                 'entry_date': current_date,
                 'last_traded_date': last_traded_date
             }
         return new_portfolio
 
-
     def remove_inactive_holdings_from_portfolios(self, current_date):
-        """Remove inactive holdings from both long and short portfolios and company scores."""
+        """Remove inactive holdings from both portfolios."""
         self.remove_inactive_holdings(self.long_portfolio, current_date)
         self.remove_inactive_holdings(self.short_portfolio, current_date)
 
@@ -96,6 +127,6 @@ class PortfolioManager:
                 self.short_portfolio[cusip]['last_traded_date'] = current_date
 
     def get_current_portfolios(self):
-        long_cusips = list(self.long_portfolio.keys())
-        short_cusips = list(self.short_portfolio.keys())
+        long_cusips = {cusip: data['weight'] for cusip, data in self.long_portfolio.items()}
+        short_cusips = {cusip: data['weight'] for cusip, data in self.short_portfolio.items()}
         return long_cusips, short_cusips
