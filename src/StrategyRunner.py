@@ -1,7 +1,7 @@
 import pandas as pd
 from tqdm import tqdm
 
-from PortfolioManager import PortfolioManager
+from src.PortfolioManager import PortfolioManager
 
 
 class StrategyRunner:
@@ -18,8 +18,10 @@ class StrategyRunner:
         self.trading_dates = crsp['date'].sort_values().unique()
         self.rebalancing_dates = funda['datadate'].sort_values().unique()
         # Initialize DataFrame to store cumulative returns
-        self.strategy_returns = pd.DataFrame(index=self.trading_dates,
-                                             columns=['long_return', 'short_return', 'long_short_return'])
+        self.daily_strategy_returns = pd.DataFrame(index=self.trading_dates,
+                                                   columns=['long', 'short', 'long_short'])
+        self.cumulative_strategy_returns = pd.DataFrame(index=self.trading_dates,
+                                                        columns=['long', 'short', 'long_short'])
         # Initialize DataFrame to store long and short cusips at each rebalancing date
         self.portfolio_tickers = pd.DataFrame(columns=['long_tickers', 'short_tickers'], index=self.rebalancing_dates)
         #TODO: Move to data
@@ -78,20 +80,20 @@ class StrategyRunner:
         avg_long_short_return = avg_long_return - avg_short_return
 
         # Store returns
-        self.strategy_returns.loc[current_date, 'long_return'] = avg_long_return + 1
-        self.strategy_returns.loc[current_date, 'short_return'] = avg_short_return + 1
-        self.strategy_returns.loc[current_date, 'long_short_return'] = avg_long_short_return + 1
+        self.daily_strategy_returns.loc[current_date, 'long'] = avg_long_return + 1
+        self.daily_strategy_returns.loc[current_date, 'short'] = avg_short_return + 1
+        self.daily_strategy_returns.loc[current_date, 'long_short'] = avg_long_short_return + 1
 
     def process_returns(self):
         # Fill any missing values with 1
-        self.strategy_returns = self.strategy_returns.fillna(1)
+        self.daily_strategy_returns = self.daily_strategy_returns.fillna(1)
 
         # Calculate cumulative returns
-        self.strategy_returns['long_cum'] = self.strategy_returns['long_return'].cumprod()
-        self.strategy_returns['short_cum'] = self.strategy_returns['short_return'].cumprod()
-        self.strategy_returns['long_short_cum'] = self.strategy_returns['long_short_return'].cumprod()
+        self.cumulative_strategy_returns['long'] = self.daily_strategy_returns['long'].cumprod()
+        self.cumulative_strategy_returns['short'] = self.daily_strategy_returns['short'].cumprod()
+        self.cumulative_strategy_returns['long_short'] = self.daily_strategy_returns['long_short'].cumprod()
 
-        return self.strategy_returns
+        return self.cumulative_strategy_returns
 
     def save_portfolio_tickers(self, file_path='portfolio_tickers.csv'):
         """Save the long and short portfolios (tickers) with rebalancing dates."""

@@ -1,6 +1,10 @@
-# Ignore everything inside the data folder but not the folder itself
-data/*
-!data/.gitkeep
+# Ignore everything inside the input_data folder but not the folder itself
+input_data/*
+!input_data/.gitkeep
+
+# Ignore everything inside the output_data folder but not the folder itself
+output_data/*
+!output_data/.gitkeep
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

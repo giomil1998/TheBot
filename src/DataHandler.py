@@ -1,10 +1,19 @@
 import os
+
 import pandas as pd
-from EnvironmentLoader import EnvironmentLoader
-from WRDSConnection import WRDSConnection
-from datetime import datetime
+
+from src.wrds_api.WRDSCredentialsLoader import EnvironmentLoader
+from src.wrds_api.WRDSConnection import WRDSConnection
+
 
 class DataHandler:
+    @staticmethod
+    def fetch_or_read_data(get_new_data, start_date, end_date):
+        if get_new_data:
+            return DataHandler.fetch_and_save_new_data(start_date, end_date)
+        else:
+            return DataHandler.read_data('input_data/funda.csv', 'input_data/crsp.csv')
+
     @staticmethod
     def fetch_and_save_new_data(start_date, end_date):
         print("Downloading Data")
@@ -17,7 +26,7 @@ class DataHandler:
         print("Calculating Piotroski Scores")
         DataHandler.add_piotroski_column_to_funda(funda)
         # Ensure the 'data' directory exists, create it if not
-        data_dir = "data"
+        data_dir = "../input_data"
         if not os.path.exists(data_dir):
             os.makedirs(data_dir)
         print("Saving data")
@@ -27,6 +36,7 @@ class DataHandler:
 
     @staticmethod
     def add_piotroski_column_to_funda(df):
+        print("Calculating Piotroski scores")
         return df.groupby('cusip').apply(DataHandler.calculate_piotroski).reset_index(drop=True)
 
     # Process Fundamental Data to Calculate Piotroski Score
@@ -63,54 +73,26 @@ class DataHandler:
         return funda, crsp
 
     @staticmethod
-    def clean_funda(funda, start_date, end_date):
+    def clean_funda(funda, start_date, end_date, market_cap_threshold, crsp):
         """Clean the funda DataFrame by removing duplicates, filtering missing years, and cleaning CUSIP."""
         print("Cleaning funda dataframe")
         funda = DataHandler.standardize_date(funda, 'datadate')
         funda = DataHandler.drop_first_year_of_each_ticker(funda)
-        funda = DataHandler.add_piotroski_column_to_funda(funda)
-        funda = filter_time_range(funda, "datadate", start_date, end_date)
+        funda = DataHandler.filter_time_range(funda, "datadate", start_date, end_date)
         funda = DataHandler.filter_duplicates(funda)
         funda = DataHandler.filter_missing_years(funda)
         funda = DataHandler.standardize_cusips(funda, 'cusip')
+        funda = DataHandler.filter_funda_by_market_cap(funda, crsp, market_cap_threshold)
         funda = funda.sort_values('datadate')
         return funda
 
     @staticmethod
-    def clean_crsp(crsp, start_date, end_date, market_cap_threshold=1_000_000_000, inactivity_threshold=30):
-        """Clean the crsp DataFrame by ensuring CUSIPs are standardized and filtering by market cap."""
+    def clean_crsp(crsp, start_date, end_date):
+        """Clean the crsp DataFrame by ensuring CUSIPs are 8 character long strings."""
         print("Cleaning crsp dataframe")
-
-        # Filter data within the time range
-        crsp = filter_time_range(crsp, "date", pd.to_datetime(start_date).date(), pd.to_datetime(end_date).date())
-
-        # Standardize CUSIPs and dates
-        crsp = DataHandler.standardize_cusips(crsp, 'cusip')
         crsp = DataHandler.standardize_date(crsp, 'date')
-
-        # Calculate market capitalization
-        crsp['market_cap'] = crsp['prc'] * crsp['shrout'] * 1000  # shrout is in thousands
-
-        # Filter companies with market cap below threshold for too many consecutive days
-        def filter_below_threshold(group):
-            # Boolean series: True if below threshold
-            below_threshold = group['market_cap'] < market_cap_threshold
-
-            # Identify streaks of consecutive days below threshold
-            streak_groups = (below_threshold != below_threshold.shift()).cumsum()
-            max_streak = below_threshold.groupby(streak_groups).transform('sum').max()
-
-            # Drop group if max streak exceeds inactivity threshold
-            if max_streak > inactivity_threshold:
-                return None
-            return group
-
-        # Apply the filter by group
-        crsp = crsp.groupby('cusip').apply(filter_below_threshold)
-
-        # Drop invalid groups and reset the index
-        crsp = crsp.dropna(subset=['cusip']).reset_index(drop=True)
-
+        crsp = DataHandler.filter_time_range(crsp, "date", start_date, end_date)
+        crsp = DataHandler.standardize_cusips(crsp, 'cusip')
         return crsp
 
     @staticmethod
@@ -142,11 +124,48 @@ class DataHandler:
         """Drop the earliest row for each ticker (tic) in the funda DataFrame."""
         # Sort by 'datadate' to ensure the earliest dates are at the top for each 'tic'
         funda = funda.sort_values(by=['tic', 'datadate'])
-
         # Drop the first occurrence of each 'tic' and keep the rest
         funda = funda.groupby('tic').apply(lambda x: x.iloc[1:]).reset_index(drop=True)
-
         return funda
 
-def filter_time_range(funda, column_name, start_date, end_date):
-    return funda[(funda[column_name] >= start_date) & (funda[column_name] <= end_date)].copy()
+    @staticmethod
+    def filter_time_range(funda, column_name, start_date, end_date):
+        return funda[(funda[column_name] >= start_date) & (funda[column_name] <= end_date)].copy()
+
+    @staticmethod
+    def filter_funda_by_market_cap(funda, crsp, market_cap_threshold):
+        """Filter funda based on market cap threshold using values from crsp on the closest available date."""
+        # Calculate market cap in crsp data
+        crsp = DataHandler.calculate_market_cap(crsp)
+        funda = DataHandler.merge_funda_with_crsp(funda, crsp)
+        filtered_funda = DataHandler.apply_market_cap_threshold(funda, market_cap_threshold)
+        return filtered_funda
+
+    @staticmethod
+    def calculate_market_cap(crsp):
+        """Calculate market cap in the crsp DataFrame."""
+        crsp['market_cap'] = crsp['prc'] * crsp['shrout'] * 1000  # shrout is in thousands
+        return crsp
+
+    @staticmethod
+    def merge_funda_with_crsp(funda, crsp):
+        """Merge funda with crsp to get market cap on the closest date for each datadate in funda."""
+        funda['datadate'] = pd.to_datetime(funda['datadate'])
+        crsp['date'] = pd.to_datetime(crsp['date'])
+
+        # Merge on 'cusip' and closest date prior to or on 'datadate'.
+        # Sometimes 'datadate' is on the weekend so this is necessary.
+        merged_funda = pd.merge_asof(
+            funda.sort_values('datadate'),
+            crsp[['cusip', 'date', 'market_cap']].sort_values('date'),
+            left_on='datadate',
+            right_on='date',
+            by='cusip',
+            direction='backward'
+        )
+        return merged_funda
+
+    @staticmethod
+    def apply_market_cap_threshold(funda, market_cap_threshold):
+        """Filter rows in funda where market cap meets or exceeds the threshold."""
+        return funda[funda['market_cap'] >= market_cap_threshold].drop(columns=['date'])
