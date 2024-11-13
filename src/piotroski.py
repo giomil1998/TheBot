@@ -3,7 +3,7 @@ from Plotter import Plotter
 from StrategyRunner import StrategyRunner
 
 if __name__ == "__main__":
-    START_DATE = '2023-01-01'
+    START_DATE = '2013-01-01'
     END_DATE = '2024-11-01'
     LONG_PORTFOLIO_SIZE = 20  # Maximum number of positions in long portfolio
     SHORT_PORTFOLIO_SIZE = 10  # Maximum number of positions in short portfolio
@@ -17,11 +17,9 @@ if __name__ == "__main__":
     funda = DataHandler.clean_funda(funda, START_DATE, END_DATE, MARKET_CAP_THRESHOLD, crsp)
     crsp = DataHandler.clean_crsp( crsp, START_DATE, END_DATE)
 
-    funda = DataHandler.add_piotroski_column_to_funda(funda)
-
     strategy_runner = StrategyRunner(funda, crsp, INACTIVITY_THRESHOLD, LONG_PORTFOLIO_SIZE, SHORT_PORTFOLIO_SIZE, START_DATE, END_DATE, PORTFOLIO_UPDATE_DELAY)
     strategy_runner.run_strategy()
-    strategy_runner.save_portfolio_tickers('output_data/long_short_portfolios.csv')
+    strategy_runner.save_portfolios_to_csv()
     cumulative_strategy_returns = strategy_runner.process_returns()
 
     Plotter.plot_strategy_returns(cumulative_strategy_returns)

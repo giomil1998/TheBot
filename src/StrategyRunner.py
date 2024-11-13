@@ -1,6 +1,7 @@
 import pandas as pd
 from tqdm import tqdm
 
+from src.DataHandler import DataHandler
 from src.PortfolioManager import PortfolioManager
 
 
@@ -95,6 +96,6 @@ class StrategyRunner:
 
         return self.cumulative_strategy_returns
 
-    def save_portfolio_tickers(self, file_path='portfolio_tickers.csv'):
+    def save_portfolios_to_csv(self, directory='../output_data', file_name='long_short_portfolios.csv'):
         """Save the long and short portfolios (tickers) with rebalancing dates."""
-        self.portfolio_tickers.to_csv(file_path)
+        DataHandler.save_file_to_directory(self.portfolio_tickers, directory, file_name)

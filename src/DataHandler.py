@@ -10,29 +10,30 @@ class DataHandler:
     @staticmethod
     def fetch_or_read_data(get_new_data, start_date, end_date):
         if get_new_data:
-            return DataHandler.fetch_and_save_new_data(start_date, end_date)
+            funda, crsp = DataHandler.fetch_new_data(start_date, end_date)
+            DataHandler.add_piotroski_column_to_funda(funda)
+            DataHandler.save_file_to_directory(funda, "../input_data", "funda.csv")
+            DataHandler.save_file_to_directory(crsp, "../input_data", "crsp.csv")
+            return funda, crsp
         else:
-            return DataHandler.read_data('input_data/funda.csv', 'input_data/crsp.csv')
+            return DataHandler.read_data('../input_data/funda.csv', '../input_data/crsp.csv')
 
     @staticmethod
-    def fetch_and_save_new_data(start_date, end_date):
+    def fetch_new_data(start_date, end_date):
         print("Downloading Data")
         wrds_credentials = EnvironmentLoader.load_wrds_credentials()
         wrds_connection = WRDSConnection(wrds_credentials['wrds_username'], wrds_credentials['wrds_password'])
         funda = wrds_connection.fetch_fundamental_data(start_date, end_date)
         crsp = wrds_connection.fetch_crsp_data(start_date, end_date)
         wrds_connection.close()
-
-        print("Calculating Piotroski Scores")
-        DataHandler.add_piotroski_column_to_funda(funda)
-        # Ensure the 'data' directory exists, create it if not
-        data_dir = "../input_data"
-        if not os.path.exists(data_dir):
-            os.makedirs(data_dir)
-        print("Saving data")
-        funda.to_csv(os.path.join(data_dir, "funda.csv"))
-        crsp.to_csv(os.path.join(data_dir, "crsp.csv"))
         return funda, crsp
+
+    @staticmethod
+    def save_file_to_directory(funda, directory, file_name):
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+        print("Saving data")
+        funda.to_csv(os.path.join(directory, file_name))
 
     @staticmethod
     def add_piotroski_column_to_funda(df):
