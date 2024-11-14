@@ -11,7 +11,7 @@ class DataHandler:
     def fetch_or_read_data(get_new_data, start_date, end_date):
         if get_new_data:
             funda, crsp = DataHandler.fetch_new_data(start_date, end_date)
-            DataHandler.add_piotroski_column_to_funda(funda)
+            funda = DataHandler.add_piotroski_column_to_funda(funda)
             DataHandler.save_file_to_directory(funda, "../input_data", "funda.csv")
             DataHandler.save_file_to_directory(crsp, "../input_data", "crsp.csv")
             return funda, crsp
