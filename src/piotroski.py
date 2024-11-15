@@ -14,7 +14,7 @@ if __name__ == "__main__":
 
     funda, crsp = DataHandler.fetch_or_read_data(GET_NEW_DATA, START_DATE, END_DATE)
 
-    funda = DataHandler.clean_funda(funda, START_DATE, END_DATE, MARKET_CAP_THRESHOLD, crsp)
+    funda = DataHandler.clean_funda(funda, START_DATE, END_DATE, MARKET_CAP_THRESHOLD)
     crsp = DataHandler.clean_crsp( crsp, START_DATE, END_DATE)
 
     strategy_runner = StrategyRunner(funda, crsp, INACTIVITY_THRESHOLD, LONG_PORTFOLIO_SIZE, SHORT_PORTFOLIO_SIZE, START_DATE, END_DATE, PORTFOLIO_UPDATE_DELAY)

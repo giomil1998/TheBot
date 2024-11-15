@@ -74,7 +74,7 @@ class DataHandler:
         return funda, crsp
 
     @staticmethod
-    def clean_funda(funda, start_date, end_date, market_cap_threshold, crsp):
+    def clean_funda(funda, start_date, end_date, market_cap_threshold):
         """Clean the funda DataFrame by removing duplicates, filtering missing years, and cleaning CUSIP."""
         print("Cleaning funda dataframe")
         funda = DataHandler.standardize_date(funda, 'datadate')
@@ -83,7 +83,7 @@ class DataHandler:
         funda = DataHandler.filter_duplicates(funda)
         funda = DataHandler.filter_missing_years(funda)
         funda = DataHandler.standardize_cusips(funda, 'cusip')
-        funda = DataHandler.filter_funda_by_market_cap(funda, crsp, market_cap_threshold)
+        funda = DataHandler.filter_funda_by_market_cap(funda, market_cap_threshold)
         funda = funda.sort_values('datadate')
         return funda
 
@@ -134,13 +134,9 @@ class DataHandler:
         return funda[(funda[column_name] >= start_date) & (funda[column_name] <= end_date)].copy()
 
     @staticmethod
-    def filter_funda_by_market_cap(funda, crsp, market_cap_threshold):
-        """Filter funda based on market cap threshold using values from crsp on the closest available date."""
-        # Calculate market cap in crsp data
-        crsp = DataHandler.calculate_market_cap(crsp)
-        funda = DataHandler.merge_funda_with_crsp(funda, crsp)
-        filtered_funda = DataHandler.apply_market_cap_threshold(funda, market_cap_threshold)
-        return filtered_funda
+    def filter_funda_by_market_cap(funda, market_cap_threshold):
+        """Filter funda reports of companies below the market cap threshold."""
+        return funda[funda['mkvalt'] * 1_000_000 >= market_cap_threshold]
 
     @staticmethod
     def calculate_market_cap(crsp):
