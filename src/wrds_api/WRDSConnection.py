@@ -17,7 +17,7 @@ class WRDSConnection:
         funda_query = f"""
             SELECT gvkey, datadate, fyear, fic, tic,
                    at, lt, pstkl, txditc, pstkrv,
-                   txdb, pstk, ni, oancf, dltt,
+                   txdb, pstk, ni, oancf, dltt, mkvalt, ebit,
                    dlc, ivst, che, re,
                    sale, cogs, xsga, xint, xrd, dp, cusip
             FROM comp.funda

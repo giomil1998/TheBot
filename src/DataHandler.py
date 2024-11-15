@@ -98,8 +98,8 @@ class DataHandler:
 
     @staticmethod
     def filter_duplicates(df):
-        """Remove duplicate rows with identical 'cusip', 'datadate', and 'Score'"""
-        return df.drop_duplicates(subset=['cusip', 'datadate', 'Score']).reset_index(drop=True)
+        """Remove duplicate rows with identical 'cusip', 'datadate'"""
+        return df.drop_duplicates(subset=['cusip', 'datadate']).reset_index(drop=True)
 
     @staticmethod
     def filter_missing_years(df):
