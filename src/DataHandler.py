@@ -19,14 +19,22 @@ class DataHandler:
             return DataHandler.read_data('../input_data/funda.csv', '../input_data/crsp.csv')
 
     @staticmethod
-    def fetch_new_data(start_date, end_date):
+    def fetch_funda(start_date, end_date):
         print("Downloading Data")
         wrds_credentials = EnvironmentLoader.load_wrds_credentials()
         wrds_connection = WRDSConnection(wrds_credentials['wrds_username'], wrds_credentials['wrds_password'])
         funda = wrds_connection.fetch_fundamental_data(start_date, end_date)
+        wrds_connection.close()
+        return funda
+
+    @staticmethod
+    def fetch_crsp(start_date, end_date):
+        print("Downloading Data")
+        wrds_credentials = EnvironmentLoader.load_wrds_credentials()
+        wrds_connection = WRDSConnection(wrds_credentials['wrds_username'], wrds_credentials['wrds_password'])
         crsp = wrds_connection.fetch_crsp_data(start_date, end_date)
         wrds_connection.close()
-        return funda, crsp
+        return crsp
 
     @staticmethod
     def save_file_to_directory(funda, directory, file_name):
@@ -47,6 +55,8 @@ class DataHandler:
         df['cfo'] = df['oancf'] / df['at'].shift(1)
         df['delta_roa'] = df['roa'] - df['roa'].shift(1)
         df['accrual'] = df['cfo'] - df['roa']
+        df['delta_liquid'] = (df['aco']/df['lco']) - (df['aco'].shift(1)/df['lco'].shift(1))
+        df['delta_offering'] = df['csho'] - df['csho'].shift(1)
         df['delta_leverage'] = df['dltt'] / df['at'].shift(1) - df['dltt'].shift(1) / df['at'].shift(2)
         df['delta_margin'] = (df['sale'] - df['cogs']) / df['sale'] - (df['sale'].shift(1) - df['cogs'].shift(1)) / df['sale'].shift(1)
         df['delta_turn'] = df['sale'] / df['at'] - df['sale'].shift(1) / df['at'].shift(1)
@@ -59,6 +69,8 @@ class DataHandler:
         df['Score'] += (df['cfo'] > 0).astype(int)
         df['Score'] += (df['delta_roa'] > 0).astype(int)
         df['Score'] += (df['accrual'] > 0).astype(int)
+        df['Score'] += (df['delta_offering'] <= 0).astype(int)
+        df['Score'] += (df['delta_liquid'] > 0).astype(int)
         df['Score'] += (df['delta_leverage'] <= 0).astype(int)
         df['Score'] += (df['delta_margin'] > 0).astype(int)
         df['Score'] += (df['delta_turn'] > 0).astype(int)

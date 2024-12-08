@@ -16,7 +16,7 @@ class WRDSConnection:
         print('Fetching fundamental data')
         funda_query = f"""
             SELECT gvkey, datadate, fyear, fic, tic,
-                   at, lt, pstkl, txditc, pstkrv,
+                   at, lt, pstkl, txditc, pstkrv, aco, lco, csho,
                    txdb, pstk, ni, oancf, dltt, mkvalt, ebit,
                    dlc, ivst, che, re,
                    sale, cogs, xsga, xint, xrd, dp, cusip
