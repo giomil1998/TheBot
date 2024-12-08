@@ -3,8 +3,8 @@ import yfinance as yf
 
 class Plotter:
     @staticmethod
-    def plot_strategy_returns(cumulative_strategy_returns):
-        spy = yf.download('^GSPC', start=cumulative_strategy_returns.index.min(),
+    def plot_strategy_returns(cumulative_strategy_returns, start):
+        spy = yf.download('^GSPC', start=start,
                           end=cumulative_strategy_returns.index.max())
 
         # Calculate S&P 500 returns
