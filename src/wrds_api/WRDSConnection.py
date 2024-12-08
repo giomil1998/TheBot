@@ -32,8 +32,8 @@ class WRDSConnection:
     def fetch_quarterly_fundamental_data(self, start_date, end_date):
         print('Fetching fundamental quarterly data')
         funda_query = f"""
-            SELECT gvkey, datadate, fyear, fic, tic,
-                   at, ltq, /*pstklq,*/ txditcq, pstkrq,
+            SELECT gvkey, datadate, fyearq, fic, tic, fqtr,
+                   atq, ltq, /*pstklq,*/ txditcq, pstkrq,
                    txdbq, pstkq, niq, oancfy, dlttq, mkvaltq, epspxq,
                    dlcq, ivstq, cheq, req,
                    saleq, cogsq, xsgaq, xintq, xrdq, dpq, cusip

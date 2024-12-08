@@ -11,9 +11,10 @@ class DataHandler:
     def fetch_or_read_data(get_new_data, start_date, end_date):
         if get_new_data:
             fundq, crsp = DataHandler.fetch_new_data(start_date, end_date)
-            fundq = DataHandler.add_piotroski_column_to_funda(fundq)
             DataHandler.save_file_to_directory(fundq, "../input_data", "fundq.csv")
             DataHandler.save_file_to_directory(crsp, "../input_data", "crsp.csv")
+            fundq = DataHandler.add_piotroski_column_to_funda(fundq)
+            DataHandler.save_file_to_directory(fundq, "../input_data", "fundq.csv")
             return fundq, crsp
         else:
             return DataHandler.read_data('../input_data/fundq.csv', '../input_data/crsp.csv')
@@ -38,18 +39,18 @@ class DataHandler:
     @staticmethod
     def add_piotroski_column_to_funda(df):
         print("Calculating Piotroski scores")
-        return df.groupby('cusip', 'fqtr').apply(DataHandler.calculate_piotroski).reset_index(drop=True)
+        return df.groupby(['cusip', 'fqtr']).apply(DataHandler.calculate_piotroski).reset_index(drop=True)
 
     # Process Fundamental Data to Calculate Piotroski Score
     @staticmethod
     def calculate_piotroski(df):
-        df['roa'] = df['ni'] / df['at'].shift(1)
-        df['cfo'] = df['oancf'] / df['at'].shift(1)
+        df['roa'] = df['niq'] / df['atq'].shift(1)
+        df['cfo'] = df['oancfy'] / df['atq'].shift(1)
         df['delta_roa'] = df['roa'] - df['roa'].shift(1)
         df['accrual'] = df['cfo'] - df['roa']
-        df['delta_leverage'] = df['dltt'] / df['at'].shift(1) - df['dltt'].shift(1) / df['at'].shift(2)
-        df['delta_margin'] = (df['sale'] - df['cogs']) / df['sale'] - (df['sale'].shift(1) - df['cogs'].shift(1)) / df['sale'].shift(1)
-        df['delta_turn'] = df['sale'] / df['at'] - df['sale'].shift(1) / df['at'].shift(1)
+        df['delta_leverage'] = df['dlttq'] / df['atq'].shift(1) - df['dlttq'].shift(1) / df['atq'].shift(2)
+        df['delta_margin'] = (df['saleq'] - df['cogsq']) / df['saleq'] - (df['saleq'].shift(1) - df['cogsq'].shift(1)) / df['saleq'].shift(1)
+        df['delta_turn'] = df['saleq'] / df['atq'] - df['saleq'].shift(1) / df['atq'].shift(1)
 
         # Initialize the Piotroski column with zeros
         df['Score'] = 0
@@ -136,7 +137,7 @@ class DataHandler:
     @staticmethod
     def filter_funda_by_market_cap(fundq, market_cap_threshold):
         """Filter fundq reports of companies below the market cap threshold."""
-        return fundq[fundq['mkvalt'] * 1_000_000 >= market_cap_threshold]
+        return fundq[fundq['mkvaltq'] * 1_000_000 >= market_cap_threshold]
 
     @staticmethod
     def calculate_market_cap(crsp):
