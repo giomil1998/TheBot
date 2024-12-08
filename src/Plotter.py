@@ -26,3 +26,6 @@ class Plotter:
         plt.grid(True)
 
         plt.show()
+        print(f"long cum. ret. is : {cumulative_strategy_returns['long'][-1]}")
+        print(f"short cum. ret. is : {cumulative_strategy_returns['short'][-1]}")
+        print(f"long-short cum. ret. is : {cumulative_strategy_returns['long_short'][-1]}")

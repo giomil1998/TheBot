@@ -3,7 +3,7 @@ from Plotter import Plotter
 from StrategyRunner import StrategyRunner
 
 if __name__ == "__main__":
-    START_DATE = '2013-01-01'
+    START_DATE = '2019-01-01'
     END_DATE = '2024-11-01'
     LONG_PORTFOLIO_SIZE = 20  # Maximum number of positions in long portfolio
     SHORT_PORTFOLIO_SIZE = 10  # Maximum number of positions in short portfolio
