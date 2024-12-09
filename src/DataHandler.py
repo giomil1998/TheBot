@@ -10,7 +10,7 @@ class DataHandler:
     @staticmethod
     def fetch_or_read_data(get_new_data, start_date, end_date):
         if get_new_data:
-            funda, crsp = DataHandler.fetch_new_data(start_date, end_date)
+            funda, crsp = DataHandler.download_data(start_date, end_date)
             funda = DataHandler.add_piotroski_column_to_funda(funda)
             DataHandler.save_file_to_directory(funda, "../input_data", "funda.csv")
             DataHandler.save_file_to_directory(crsp, "../input_data", "crsp.csv")
@@ -19,22 +19,14 @@ class DataHandler:
             return DataHandler.read_data('../input_data/funda.csv', '../input_data/crsp.csv')
 
     @staticmethod
-    def fetch_funda(start_date, end_date):
+    def download_data(start_date, end_date):
         print("Downloading Data")
         wrds_credentials = EnvironmentLoader.load_wrds_credentials()
         wrds_connection = WRDSConnection(wrds_credentials['wrds_username'], wrds_credentials['wrds_password'])
-        funda = wrds_connection.fetch_fundamental_data(start_date, end_date)
+        funda = wrds_connection.download_fundamental_data(start_date, end_date)
+        crsp = wrds_connection.download_crsp_data(start_date, end_date)
         wrds_connection.close()
-        return funda
-
-    @staticmethod
-    def fetch_crsp(start_date, end_date):
-        print("Downloading Data")
-        wrds_credentials = EnvironmentLoader.load_wrds_credentials()
-        wrds_connection = WRDSConnection(wrds_credentials['wrds_username'], wrds_credentials['wrds_password'])
-        crsp = wrds_connection.fetch_crsp_data(start_date, end_date)
-        wrds_connection.close()
-        return crsp
+        return funda, crsp
 
     @staticmethod
     def save_file_to_directory(funda, directory, file_name):
