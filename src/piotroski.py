@@ -5,7 +5,7 @@ from Plotter import Plotter
 from StrategyRunner import StrategyRunner
 
 if __name__ == "__main__":
-    START_DATE = '2015-01-01'
+    START_DATE = '2019-01-01'
     END_DATE = '2024-11-01'
     LONG_PORTFOLIO_SIZE = 20  # Maximum number of positions in long portfolio
     SHORT_PORTFOLIO_SIZE = 10  # Maximum number of positions in short portfolio
@@ -16,7 +16,7 @@ if __name__ == "__main__":
 
     funda, crsp = DataHandler.fetch_or_read_data(GET_NEW_DATA, START_DATE, END_DATE)
 
-    funda = DataHandler.clean_funda(funda, START_DATE, END_DATE, MARKET_CAP_THRESHOLD)
+    funda = DataHandler.clean_funda(funda, START_DATE, END_DATE, MARKET_CAP_THRESHOLD, crsp)
 
     crsp = DataHandler.clean_crsp(crsp, START_DATE, END_DATE)
 
