@@ -10,7 +10,7 @@ if __name__ == "__main__":
     INACTIVITY_THRESHOLD = 30  # Number of consecutive days below market cap threshold
     MARKET_CAP_THRESHOLD = 2_000_000_000  # Minimum market cap in dollars
     PORTFOLIO_UPDATE_DELAY = 60  # Number of days before the data in a report is used to update portfolios
-    GET_NEW_DATA = True
+    GET_NEW_DATA = False
 
     funda, crsp = DataHandler.fetch_or_read_data(GET_NEW_DATA, START_DATE, END_DATE)
 
