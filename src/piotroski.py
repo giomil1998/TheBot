@@ -1,3 +1,5 @@
+import pandas as pd
+
 from DataHandler import DataHandler
 from Plotter import Plotter
 from StrategyRunner import StrategyRunner
@@ -23,5 +25,6 @@ if __name__ == "__main__":
     strategy_runner.save_portfolios_to_csv()
     cumulative_strategy_returns = strategy_runner.process_returns()
 
-    Plotter.plot_strategy_returns(cumulative_strategy_returns)
+    plot_start_date = funda['datadate'].min() + pd.Timedelta(days=PORTFOLIO_UPDATE_DELAY)
+    Plotter.plot_strategy_returns(cumulative_strategy_returns, plot_start_date)
     print("done")
