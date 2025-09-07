@@ -1,3 +1,5 @@
+import pandas as pd
+
 from DataHandler import DataHandler
 from Plotter import Plotter
 from StrategyRunner import StrategyRunner
@@ -12,15 +14,17 @@ if __name__ == "__main__":
     PORTFOLIO_UPDATE_DELAY = 60  # Number of days before the data in a report is used to update portfolios
     GET_NEW_DATA = False
 
-    fundq, crsp = DataHandler.fetch_or_read_data(GET_NEW_DATA, START_DATE, END_DATE)
+    funda, crsp = DataHandler.fetch_or_read_data(GET_NEW_DATA, START_DATE, END_DATE)
 
-    fundq = DataHandler.clean_funda(fundq, START_DATE, END_DATE, MARKET_CAP_THRESHOLD)
+    funda = DataHandler.clean_funda(funda, START_DATE, END_DATE, MARKET_CAP_THRESHOLD, crsp)
+
     crsp = DataHandler.clean_crsp(crsp, START_DATE, END_DATE)
 
-    strategy_runner = StrategyRunner(fundq, crsp, INACTIVITY_THRESHOLD, LONG_PORTFOLIO_SIZE, SHORT_PORTFOLIO_SIZE, START_DATE, END_DATE, PORTFOLIO_UPDATE_DELAY)
+    strategy_runner = StrategyRunner(funda, crsp, INACTIVITY_THRESHOLD, LONG_PORTFOLIO_SIZE, SHORT_PORTFOLIO_SIZE, START_DATE, END_DATE, PORTFOLIO_UPDATE_DELAY)
     strategy_runner.run_strategy()
     strategy_runner.save_portfolios_to_csv()
     cumulative_strategy_returns = strategy_runner.process_returns()
 
-    Plotter.plot_strategy_returns(cumulative_strategy_returns)
+    plot_start_date = funda['datadate'].min() + pd.Timedelta(days=PORTFOLIO_UPDATE_DELAY)
+    Plotter.plot_strategy_returns(cumulative_strategy_returns, plot_start_date)
     print("done")

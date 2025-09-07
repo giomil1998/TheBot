@@ -6,8 +6,8 @@ from src.PortfolioManager import PortfolioManager
 
 
 class StrategyRunner:
-    def __init__(self, fundq, crsp, inactivity_threshold, long_portfolio_size, short_portfolio_size, start_date, end_date, portfolio_update_delay):
-        self.fundq = fundq
+    def __init__(self, funda, crsp, inactivity_threshold, long_portfolio_size, short_portfolio_size, start_date, end_date, portfolio_update_delay):
+        self.funda = funda
         self.crsp = crsp
         self.inactivity_threshold = inactivity_threshold
         self.portfolio_update_delay = portfolio_update_delay
@@ -17,7 +17,7 @@ class StrategyRunner:
 
         self.all_dates = pd.date_range(start=start_date, end=end_date, freq='D')
         self.trading_dates = crsp['date'].sort_values().unique()
-        self.rebalancing_dates = fundq['datadate'].sort_values().unique()
+        self.rebalancing_dates = funda['datadate'].sort_values().unique()
         # Initialize DataFrame to store cumulative returns
         self.daily_strategy_returns = pd.DataFrame(index=self.trading_dates,
                                                    columns=['long', 'short', 'long_short'])
@@ -27,13 +27,13 @@ class StrategyRunner:
         self.portfolio_tickers = pd.DataFrame(columns=['long_tickers', 'short_tickers'], index=self.rebalancing_dates)
         #TODO: Move to data
         # Create a dictionary mapping cusip to tic (ticker)
-        self.cusip_to_tic = fundq[['cusip', 'tic']].drop_duplicates().set_index('cusip')['tic']
+        self.cusip_to_tic = funda[['cusip', 'tic']].drop_duplicates().set_index('cusip')['tic']
 
     def run_strategy(self):
         for current_date in tqdm(self.all_dates, desc="Processing Trading Dates"):
             # Check if any new reports were released on this date
             lagged_date = current_date - pd.Timedelta(days=self.portfolio_update_delay)
-            new_reports = self.fundq[self.fundq['datadate'] == lagged_date]
+            new_reports = self.funda[self.funda['datadate'] == lagged_date]
 
             if not new_reports.empty:
                 # Update company_scores with new reports as of the lagged date
