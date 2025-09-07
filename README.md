@@ -1,4 +1,4 @@
-# The_bot
+# TheBot
 # Piotroski F-Score Sorting Bot
 
 This Python bot screens and sorts stocks based on the Piotroski F-Score, a fundamental analysis metric that evaluates the financial strength of a company.
